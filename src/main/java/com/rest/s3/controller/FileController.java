@@ -3,10 +3,9 @@ package com.rest.s3.controller;
 
 import java.io.InputStream;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.io.ByteArrayInputStream;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -34,7 +33,6 @@ public class FileController {
 
 	private final FileService fileService;
 	private final FileRepo fileRepo;
-	@Autowired
 	public FileController(FileService fileService, UserRepo userRepo, FileRepo fileRepo) {
 		
 		this.fileService = fileService;
@@ -53,37 +51,35 @@ public class FileController {
         }
     }
 
-    // List Files
+ // List Files
     @GetMapping("list")
-    public List<FileData> listFiles(@RequestParam int page, @RequestParam int size) {
-        return fileService.getFiles(page, size);
+    public Map<String, Object> listFiles(
+            @RequestParam(required = false) Long userId,
+            @RequestParam int page,
+            @RequestParam int size) {
+        return fileService.getFiles(userId, page, size);
     }
 
-    // Download 
+
+ // Download
     @GetMapping("/download/{filename}")
     public ResponseEntity<InputStreamResource> downloadFile(@PathVariable String filename, @RequestParam("userId") Long userId) {
         try {
-            InputStream fileStream = fileService.downloadFile(filename, userId);
-
-            if (fileStream == null) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new InputStreamResource(new ByteArrayInputStream(
-                        ("File not found or access denied for user ID " + userId).getBytes())));
-            }
-
-            // Get file content type
+            
+            InputStream fileStream = fileService.downloadFile(filename, userId);            
             String contentType = fileService.getFileContentType(filename);
-
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                     .contentType(MediaType.parseMediaType(contentType))
                     .body(new InputStreamResource(fileStream));
-
+        } catch (IllegalArgumentException e) {  
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new InputStreamResource(new ByteArrayInputStream(
+                    e.getMessage().getBytes())));  
         } catch (Exception e) {
+            
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
-
-    
     @RestControllerAdvice
     public static class GlobalExceptionHandler {
 

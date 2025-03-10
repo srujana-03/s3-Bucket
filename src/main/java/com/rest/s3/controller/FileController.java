@@ -1,11 +1,11 @@
 package com.rest.s3.controller;
 
-
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.io.ByteArrayInputStream;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -31,12 +31,16 @@ import com.rest.s3.service.FileService;
 @RequestMapping("/api/files")
 public class FileController {
 
-	private final FileService fileService;
-	 public FileController(FileService fileService) {
-	        this.fileService = fileService;
-	    }
+    private final FileService fileService;
+    private final FileRepo fileRepo;
 
-	 // Upload 
+    @Autowired
+    public FileController(FileService fileService, UserRepo userRepo, FileRepo fileRepo) {
+        this.fileService = fileService;
+        this.fileRepo = fileRepo;
+    }
+
+    // Upload
     @PostMapping("/upload")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file, @RequestParam("userId") Long userId) {
         try {
@@ -47,25 +51,21 @@ public class FileController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred.");
         }
     }
- // List Files
+
+    // List Files
     @GetMapping("list")
     public Map<String, Object> listFiles(
             @RequestParam(required = false) Long userId,
             @RequestParam int page,
             @RequestParam int size) {
         return fileService.getFiles(userId, page, size);
-    } 
+    }
 
-
-
-
-
- // Download
+    // Download
     @GetMapping("/download/{filename}")
     public ResponseEntity<InputStreamResource> downloadFile(@PathVariable String filename, @RequestParam("userId") Long userId, @RequestParam("attachmentId") Long attachmentId) {
         try {
-            
-            InputStream fileStream = fileService.downloadFile(filename, userId, attachmentId);            
+            InputStream fileStream = fileService.downloadFile(filename, userId, attachmentId);
             String contentType = fileService.getFileContentType(filename);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
@@ -75,10 +75,11 @@ public class FileController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new InputStreamResource(new ByteArrayInputStream(
                     e.getMessage().getBytes())));  
         } catch (Exception e) {
-            
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
+
+    // Global Exception Handler for File Size Exceed
     @RestControllerAdvice
     public static class GlobalExceptionHandler {
 
@@ -87,6 +88,4 @@ public class FileController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("File size exceeds the maximum limit.");
         }
     }
-
-
 }

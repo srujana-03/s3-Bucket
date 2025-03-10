@@ -6,6 +6,7 @@ import com.rest.s3.model.UserData;
 
 public interface UserRepo extends JpaRepository<UserData, Long> {
 
+
 	boolean existsByUsernameIgnoreCase(String username);
 //	UserData findByUsername(String username);
 
@@ -14,5 +15,6 @@ public interface UserRepo extends JpaRepository<UserData, Long> {
 	UserData findByUsernameIgnoreCase(String username);
 
 	UserData findByEmailIgnoreCase(String email);
+
 
 }

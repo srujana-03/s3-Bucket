@@ -22,7 +22,7 @@ public class UserController {
     @PostMapping("addUser")
     public ResponseEntity<String> addUser(@RequestBody UserData user) {
         try {
-            userService.saveUser(user);
+            userService.saveUser(user);//calling saveUser from userService
             return new ResponseEntity<>("User added successfully!", HttpStatus.OK);
         } catch (IllegalArgumentException e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);

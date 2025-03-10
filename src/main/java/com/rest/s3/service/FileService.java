@@ -3,10 +3,9 @@ package com.rest.s3.service;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.Map; 
+import java.util.LinkedHashMap; 
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -29,57 +28,40 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
-
 @Service
 public class FileService {
-	
 
+    private final S3Client s3Client;
 
-	private final S3Client s3Client;
-	
-	@Value("${aws.s3.bucketName}")
-	private String bucketName;
-	
-	private final FileRepo fileRepo;
-	private final UserRepo userRepo;
-	
-	
-	
+    @Value("${aws.s3.bucketName}")
+    private String bucketName;
 
-	public FileService(S3Client s3Client, String bucketName, FileRepo fileRepo, UserRepo userRepo) {
-		super();
-		this.s3Client = s3Client;
-		this.bucketName = bucketName;
-		this.fileRepo = fileRepo;
-		this.userRepo = userRepo;
-	}
-    
+    private final FileRepo fileRepo;
+    private final UserRepo userRepo;
 
+    public FileService(S3Client s3Client, String bucketName, FileRepo fileRepo, UserRepo userRepo) {
+        super();
+        this.s3Client = s3Client;
+        this.bucketName = bucketName;
+        this.fileRepo = fileRepo;
+        this.userRepo = userRepo;
+    }
 
-	// Upload file and save metadata
+    // Upload file and save metadata
     public String uploadFile(MultipartFile file, Long userId) throws IOException {
         validateFile(file);
         if (userId < 1) {
-    	    throw new IllegalArgumentException("User ID should be positive.");
-    	}
+            throw new IllegalArgumentException("User ID should be positive.");
+        }
         UserData user = userRepo.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid user"));
-        
 
         String fileName = file.getOriginalFilename();
         String contentType = file.getContentType();
 
-        int dotIndex = fileName.lastIndexOf('.');
-        String baseFileName = (dotIndex > 0) ? fileName.substring(0, dotIndex) : fileName; 
-        String extension = (dotIndex > 0) ? fileName.substring(dotIndex) : ""; 
-        List<FileData> existingFiles = fileRepo.findByFileNameStartingWith(baseFileName);
-        int count = existingFiles.size() + 1; 
-        String newFileName = baseFileName + "_" + count + extension;
-      
-        uploadFileToS3(file, newFileName, contentType);
-        saveFileMetadata(file, user, newFileName, contentType);
+        saveFileMetadataAndUploadFileToS3(file, user, fileName, contentType);
 
-        return "File uploaded successfully: " + newFileName;
+        return "File uploaded successfully: " + fileName;
     }
 
     // Validate file type and filename
@@ -94,8 +76,18 @@ public class FileService {
         }
     }
 
-    // Upload file to S3
-    private void uploadFileToS3(MultipartFile file, String newFileName, String contentType) throws IOException {
+    // Save file metadata in the database
+    private void saveFileMetadataAndUploadFileToS3(MultipartFile file, UserData user, String fileName, String contentType) throws IOException {
+        FileData fileData = new FileData();
+        fileData.setFileName(fileName);
+        fileData.setFileType(contentType);
+        fileData.setLastUpdatedOn(LocalDateTime.now());
+        fileData.setUser(user);
+
+        fileRepo.save(fileData);
+
+        Long attachmentId = fileData.getId();
+        String newFileName = attachmentId + "_" + fileName;  // Unique file name using attachmentId
         InputStream fileInputStream = file.getInputStream();
 
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
@@ -110,18 +102,6 @@ public class FileService {
             throw new IllegalArgumentException("Error occurred during file upload: " + e.awsErrorDetails().errorMessage());
         }
     }
-
-    // Save file metadata in the database
-    private void saveFileMetadata(MultipartFile file, UserData user, String newFileName, String contentType) {
-        FileData fileData = new FileData();
-        fileData.setFileName(newFileName);
-        fileData.setFileType(contentType);
-        fileData.setLastUpdatedOn(LocalDateTime.now());
-        fileData.setUser(user);
-
-        fileRepo.save(fileData);
-    }
-
 
     // Get files with pagination and optional userId filter
     public Map<String, Object> getFiles(Long userId, int page, int size) {
@@ -144,28 +124,30 @@ public class FileService {
             filePage = fileRepo.findAll(pageable);
         }
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("totalCount", filePage.getTotalElements()); 
-        response.put("pageSize", filePage.getSize()); 
-        response.put("totalPages", filePage.getTotalPages()); 
-        response.put("currentPage", filePage.getNumber() + 1); 
+        response.put("totalCount", filePage.getTotalElements());
+        response.put("pageSize", filePage.getSize());
+        response.put("totalPages", filePage.getTotalPages());
+        response.put("currentPage", filePage.getNumber() + 1);
         response.put("files", filePage.getContent());
 
         return response;
     }
 
     // Download file if authorized
-    public InputStream downloadFile(String filename, Long userId) throws IOException {
-    	
-    	if (userId < 1) {
-    	    throw new IllegalArgumentException("User ID should be positive.");
-    	}
-  
-        FileData fileData = fileRepo.findByFileName(filename)
-                .orElseThrow(() -> new IllegalArgumentException("No record found with the given filename: " + filename));
+    public InputStream downloadFile(String filename, Long userId, Long attachmentId) throws IOException {
+        if (userId < 1) {
+            throw new IllegalArgumentException("User ID should be positive.");
+        }
 
         
-        UserData user = userRepo.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("No record found with the given userId: " + userId));
+        Optional<FileData> fileDataOptional = fileRepo.findById(attachmentId);
+        FileData fileData = fileDataOptional.orElseThrow(() ->
+                new IllegalArgumentException("No record found with the given attachmentId: " + attachmentId));
+
+       
+        Optional<UserData> userOptional = userRepo.findById(userId);
+        UserData user = userOptional.orElseThrow(() ->
+                new IllegalArgumentException("No record found with the given userId: " + userId));
 
         
         if (!fileData.getUser().getId().equals(userId)) {
@@ -173,15 +155,18 @@ public class FileService {
         }
 
         
-        return getFileFromS3(fileData);
+        String newFileName = attachmentId + "_" + filename;
+
+        
+        return getFileFromS3(newFileName);
     }
 
-    
-    private InputStream getFileFromS3(FileData fileData) throws IOException {
+    // Retrieve the file from S3
+    private InputStream getFileFromS3(String newFileName) throws IOException {
         try {
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                     .bucket(bucketName)
-                    .key(fileData.getFileName())
+                    .key(newFileName)
                     .build();
 
             ResponseInputStream<GetObjectResponse> s3Object = s3Client.getObject(getObjectRequest);
@@ -197,7 +182,7 @@ public class FileService {
             return "image/jpeg";
         } else if (filename.endsWith(".png")) {
             return "image/png";
-        }  else if (filename.endsWith(".docx")) {
+        } else if (filename.endsWith(".docx")) {
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         }
         return "application/octet-stream";  // Default content type

@@ -16,7 +16,8 @@ public class UserService {
     public UserData saveUser(UserData user) {
         validateUser(user);
         
-        UserData userWithSameEmail = userRepo.findByEmailIgnoreCase(user.getEmail());
+        UserData userWithSameEmail = userRepo.findByEmailIgnoreCase(user.getEmail());//no same email exists for different users
+        
         if (userWithSameEmail != null && !userWithSameEmail.getUsername().equalsIgnoreCase(user.getUsername())) {
             throw new IllegalArgumentException("This email is already associated with another user. Please change your email ID.");
         }

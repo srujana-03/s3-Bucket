@@ -32,12 +32,9 @@ import com.rest.s3.service.FileService;
 public class FileController {
 
 	private final FileService fileService;
-	private final FileRepo fileRepo;
-	public FileController(FileService fileService, UserRepo userRepo, FileRepo fileRepo) {
-		
-		this.fileService = fileService;
-		this.fileRepo = fileRepo;
-	}
+	 public FileController(FileService fileService) {
+	        this.fileService = fileService;
+	    }
 
 	 // Upload 
     @PostMapping("/upload")
@@ -50,7 +47,6 @@ public class FileController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred.");
         }
     }
-
  // List Files
     @GetMapping("list")
     public Map<String, Object> listFiles(
@@ -58,15 +54,18 @@ public class FileController {
             @RequestParam int page,
             @RequestParam int size) {
         return fileService.getFiles(userId, page, size);
-    }
+    } 
+
+
+
 
 
  // Download
     @GetMapping("/download/{filename}")
-    public ResponseEntity<InputStreamResource> downloadFile(@PathVariable String filename, @RequestParam("userId") Long userId) {
+    public ResponseEntity<InputStreamResource> downloadFile(@PathVariable String filename, @RequestParam("userId") Long userId, @RequestParam("attachmentId") Long attachmentId) {
         try {
             
-            InputStream fileStream = fileService.downloadFile(filename, userId);            
+            InputStream fileStream = fileService.downloadFile(filename, userId, attachmentId);            
             String contentType = fileService.getFileContentType(filename);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")

@@ -22,6 +22,9 @@ public interface FileRepo extends JpaRepository<FileData, Long> {
 
 	Page<FileData> findByUserId(Long userId, Pageable pageable);
 
+//	Page<FileData> findByUserId(Long userId, Pageable pageable);
+
+
 	
 
 }
